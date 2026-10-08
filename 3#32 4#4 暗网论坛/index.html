@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APEX Browser</title>
+  <style>
+    /* 全局基础设置 */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html {
+      background-color: #121212;
+      color: #e8eaed;
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* 顶部普通浏览器地址栏 */
+    .browser-toolbar {
+      height: 48px;
+      background-color: #1f1f1f;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 15px;
+      position: relative;
+      z-index: 2000;
+      border-bottom: 1px solid #2d2d2d;
+    }
+    .browser-btn { color: #9aa0a6; font-size: 16px; cursor: pointer; user-select: none; }
+    .browser-btn:hover { color: #fff; }
+    .address-bar-container {
+      flex: 1; height: 32px;
+      background-color: #2b2b2b;
+      border-radius: 16px;
+      border: 1px solid #3c3c3c;
+      display: flex; align-items: center;
+      padding: 0 14px;
+      gap: 10px;
+      cursor: text;
+    }
+    .lock-icon { 
+      width: 12px; height: 12px; fill: #9aa0a6; 
+      display: flex; align-items: center; justify-content: center;
+    }
+    .address-bar-container input {
+      width: 100%; background: transparent; border: none;
+      color: #e8eaed; font-family: monospace; font-size: 13px; outline: none;
+      cursor: text;
+    }
+
+    /* 视图切换控制 */
+    .view-pane {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      opacity: 0; visibility: hidden; overflow-y: auto;
+      transition: opacity 0.2s;
+    }
+    .view-pane.active { opacity: 1; visibility: visible; }
+
+    /* 视图 1：普通浏览器首页 */
+    #pane-start {
+      top: 48px;
+      background-color: #171717;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .start-logo {
+      font-size: 56px; font-weight: 700; letter-spacing: 2px; color: #e8eaed; margin-bottom: 25px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .start-search-box {
+      width: 580px; height: 44px;
+      background-color: #202124; border-radius: 22px;
+      border: 1px solid #3c4043;
+      display: flex; align-items: center; padding: 0 18px;
+      color: #9aa0a6; font-size: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+    }
+
+    /* 固定的论坛 Header */
+    .forum-header-sticky {
+      position: sticky; top: 0; z-index: 1000;
+      background-color: #181818;
+      border-bottom: 1px solid #2d2d2d;
+      padding: 16px 40px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .forum-title { font-size: 24px; font-weight: bold; font-family: "Courier New", monospace; color: #fff; letter-spacing: 0.5px; }
+    
+    .forum-nav { display: flex; justify-content: space-between; align-items: center; background-color: #222; padding: 8px 15px; border-radius: 4px; }
+    .nav-links { display: flex; gap: 20px; font-size: 13px; font-weight: bold; color: #888; }
+    .nav-links span:hover { color: #fff; cursor: pointer; }
+    
+    .forum-search-box { display: flex; }
+    .forum-search-box input {
+      background-color: #111; border: 1px solid #3c3c3c; color: #ccc;
+      padding: 6px 12px; width: 280px; outline: none; font-size: 13px; font-family: monospace;
+      border-radius: 3px 0 0 3px;
+    }
+    .forum-search-box button {
+      background-color: #2d2d2d; border: 1px solid #3c3c3c; border-left: none; color: #ddd;
+      padding: 6px 14px; cursor: pointer; font-size: 13px; border-radius: 0 3px 3px 0;
+    }
+    .forum-search-box button:hover { background-color: #3d3d3d; }
+
+    /* 论坛通用布局 */
+    .forum-layout { display: flex; padding: 25px 40px 60px 40px; gap: 25px; align-items: flex-start; }
+    
+    .forum-sidebar { width: 220px; flex-shrink: 0; }
+    .sidebar-block { background-color: #1a1a1a; border: 1px solid #2a2a2a; margin-bottom: 20px; border-radius: 3px; }
+    .sidebar-block h3 {
+      background-color: #222; padding: 10px 12px; font-size: 11px; color: #888;
+      border-bottom: 1px solid #2a2a2a; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .sidebar-list { padding: 8px 0; }
+    .sidebar-list div { padding: 6px 12px; font-size: 13px; color: #aaa; cursor: pointer; }
+    .sidebar-list div:hover { background-color: #252525; color: #4ade80; }
+    .sidebar-list div.active { color: #4ade80; font-weight: bold; border-left: 2px solid #4ade80; background-color: #1e2620; }
+
+    .forum-main { flex: 1; }
+    .breadcrumb { font-size: 12px; color: #666; margin-bottom: 15px; }
+    .breadcrumb span, .breadcrumb a { color: #aaa; text-decoration: none; cursor: pointer; }
+    .breadcrumb a:hover { color: #fff; text-decoration: underline; }
+
+    /* 视图 2：帖子列表 */
+    #pane-forum { background-color: #121212; color: #d4d4d4; }
+    
+    .thread-table { width: 100%; border-collapse: collapse; background-color: #161616; border: 1px solid #2a2a2a; }
+    .thread-table th { background-color: #1a1a1a; padding: 10px 15px; text-align: left; font-size: 11px; color: #666; text-transform: uppercase; border-bottom: 1px solid #2a2a2a; }
+    .thread-table td { padding: 12px 15px; border-bottom: 1px solid #222; vertical-align: top; }
+    .thread-table tr:hover { background-color: #1c1c1c; }
+    
+    .t-icon { width: 30px; color: #444; font-size: 16px; text-align: center; }
+    .t-main { width: 55%; }
+    .t-title { color: #5ea8d6; font-size: 14px; font-weight: 500; text-decoration: none; display: block; margin-bottom: 4px; }
+    .t-title:hover { text-decoration: underline; cursor: pointer; }
+    .t-desc { font-size: 11px; color: #666; }
+    .t-author { font-size: 11px; color: #555; margin-top: 4px; }
+    .t-stats { width: 10%; font-size: 11px; color: #666; text-align: right; }
+    .t-last { width: 15%; font-size: 11px; color: #666; text-align: right; }
+
+    .kw-hl {
+      color: #facc15;
+      background-color: rgba(250, 204, 21, 0.12);
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+
+    /* 视图 3：帖子详情 */
+    #pane-post { background-color: #121212; }
+    
+    .post-box { background-color: #161616; border: 1px solid #2a2a2a; display: flex; width: 100%; flex-direction: row; }
+    .post-author-panel {
+      width: 180px; background-color: #1a1a1a; padding: 20px 15px; border-right: 1px solid #2a2a2a;
+      text-align: center; flex-shrink: 0;
+    }
+    .author-name { color: #fff; font-weight: bold; font-size: 14px; margin-bottom: 6px; }
+    .author-title { color: #777; font-size: 11px; font-weight: bold; margin-bottom: 15px; }
+    .author-stats { text-align: left; font-size: 11px; color: #666; line-height: 1.8; background: #111; padding: 10px; border: 1px dotted #2a2a2a; }
+    
+    .post-content-panel { flex: 1; padding: 25px; display: flex; flex-direction: column; justify-content: space-between; }
+    .post-top-meta { font-size: 11px; color: #555; border-bottom: 1px solid #222; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; }
+    .post-h1 { font-size: 17px; color: #eee; margin-bottom: 20px; font-weight: normal; line-height: 1.4; }
+    .post-text { font-size: 13.5px; color: #ccc; line-height: 1.7; font-family: sans-serif; margin-bottom: 30px; }
+    
+    .pgp-block {
+      background-color: #0d0d0d;
+      border: 1px solid #222;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #666;
+      word-break: break-all;
+      line-height: 1.4;
+      margin-bottom: 25px;
+    }
+    .post-action-bar {
+      border-top: 1px solid #222;
+      padding-top: 15px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .post-action-bar button {
+      background-color: #1a1a1a;
+      border: 1px solid #333;
+      color: #888;
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .post-action-bar button:hover { background-color: #222; color: #ddd; }
+
+    /* 底部命令唤起条 */
+    .mail-cli-overlay {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background-color: #0b0d12; border-top: 1px solid #232733; padding: 10px 18px;
+      font-family: "SF Mono", Monaco, Consolas, "Courier New", monospace; font-size: 13px;
+      color: #38bdf8; display: none; align-items: center; gap: 8px; z-index: 3000;
+    }
+    .t-prompt { color: #38bdf8; font-weight: 600; }
+    .t-cmd { color: #ffffff; font-weight: 600; }
+    .cursor { display: inline-block; width: 8px; height: 15px; background: #38bdf8; vertical-align: middle; margin-left: 3px; animation: blink 0.9s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ================= 视图 4：全屏跳板追踪终端 (严格对齐 3#25 真实规范) ================= */
+    #pane-terminal {
+      background-color: #0b0d12; padding: 28px 36px;
+      font-family: "SF Mono", Monaco, Consolas, "Courier New", monospace;
+      font-size: 13px; line-height: 1.6; color: #c9d1d9; z-index: 4000;
+    }
+    .t-cyan { color: #38bdf8; }
+    .t-yellow { color: #facc15; }
+    .t-green { color: #4ade80; }
+    .t-dim { color: #525866; }
+    .t-white { color: #f8fafc; }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部浏览器地址栏 -->
+  <div class="browser-toolbar" id="main-browser-bar">
+    <div class="browser-btn">◀</div>
+    <div class="browser-btn">▶</div>
+    <div class="browser-btn">↻</div>
+    <div class="address-bar-container" id="address-container">
+      <div class="lock-icon">
+        <svg viewBox="0 0 24 24"><path d="M18 10v-4c0-3.31-2.69-6-6-6s-6 2.69-6 6v4H4v12h16V10h-2zm-6-8c2.21 0 4 1.79 4 4v4H8v-4c0-2.21 1.79-4 4-4zm2 13c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2z"/></svg>
+      </div>
+      <input type="text" id="url-bar" value="" placeholder="Search or enter web address" spellcheck="false" autocomplete="off">
+    </div>
+  </div>
+
+  <!-- 视图 1：普通浏览器首页 -->
+  <div class="view-pane active" id="pane-start">
+    <div class="start-logo">APEX</div>
+    <div class="start-search-box">Type a URL or search phrase...</div>
+  </div>
+
+  <!-- 视图 2：暗网论坛页 -->
+  <div class="view-pane" id="pane-forum">
+    <div class="forum-header-sticky">
+      <div class="forum-title">AetherBoard</div>
+      <div class="forum-nav">
+        <div class="nav-links">
+          <span>Forums</span> <span>Escrow</span> <span>Rules</span> <span>Mirrors</span>
+        </div>
+        <div class="forum-search-box">
+          <input type="text" id="forum-search-bar" placeholder="Search forum..." spellcheck="false" autocomplete="off">
+          <button id="search-btn">Search</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="forum-layout">
+      <aside class="forum-sidebar">
+        <div class="sidebar-block">
+          <h3>Categories</h3>
+          <div class="sidebar-list">
+            <div>Announcements</div>
+            <div>OpSec & Anonymity</div>
+            <div class="active">Job Market & Services</div>
+            <div>Database Leaks</div>
+            <div>Malware & Exploits</div>
+          </div>
+        </div>
+        <div class="sidebar-block">
+          <h3>Network Info</h3>
+          <div style="padding: 12px; font-size: 11px; color: #777; line-height: 1.6; font-family: monospace;">
+            JS Status: Disabled<br>
+            Server Time: 13:42 UTC<br>
+            System: Nominal<br><br>
+            * Escrow mandatory for all deals.
+          </div>
+        </div>
+      </aside>
+
+      <main class="forum-main">
+        <div class="breadcrumb">AetherBoard > Forums > <span>Job Market & Services</span></div>
+        <table class="thread-table">
+          <thead>
+            <tr>
+              <th colspan="2">Thread / Author</th>
+              <th>Replies</th>
+              <th>Last Post</th>
+            </tr>
+          </thead>
+          <tbody id="forum-list">
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">Need custom crypter for AgentTesla (FUD)</span><div class="t-desc">Paying $500 for runtime undetectable stub.</div><div class="t-author">By CoderX</div></td><td class="t-stats">14</td><td class="t-last">Today, 12:44</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">Looking for EU Physical Drops (Germany/NL)</span><div class="t-desc">Need reliable receivers for carded electronics. 30% cut.</div><div class="t-author">By CarderKing</div></td><td class="t-stats">8</td><td class="t-last">Today, 11:20</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">WTB: Fullz with high credit score (US Only)</span><div class="t-desc">Escrow ready. Need fresh SSN and DOB.</div><div class="t-author">By GhostMan</div></td><td class="t-stats">22</td><td class="t-last">Today, 09:15</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">Seeking insider at major telco for SIM swapping</span><div class="t-desc">High payout per successful port. US carriers preferred.</div><div class="t-author">By SwapGod</div></td><td class="t-stats">4</td><td class="t-last">Yesterday, 22:10</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">0day exploit for latest Windows Print Spooler</span><div class="t-desc">Tested on Win11. Escrow ONLY.</div><div class="t-author">By ZeroDayHunter</div></td><td class="t-stats">31</td><td class="t-last">Yesterday, 19:45</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">SELLING: 500k HQ combo list (Gaming/Streaming)</span><div class="t-desc">Freshly cracked, 80% private domains.</div><div class="t-author">By DataBreach99</div></td><td class="t-stats">12</td><td class="t-last">Yesterday, 16:30</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">Need bulletproof hosting for phishing campaigns</span><div class="t-desc">Must ignore DMCA and Spamhaus reports.</div><div class="t-author">By PhishMaster</div></td><td class="t-stats">7</td><td class="t-last">Yesterday, 14:12</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">WTB: RDP access to corporate networks</span><div class="t-desc">Looking for Healthcare/Finance sector. Paying premium.</div><div class="t-author">By RansomGroup</div></td><td class="t-stats">19</td><td class="t-last">Yesterday, 08:05</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">Looking to hire experienced social engineers</span><div class="t-desc">Targeting enterprise helpdesks. English fluency required.</div><div class="t-author">By VoiceActor</div></td><td class="t-stats">2</td><td class="t-last">Oct 01, 23:55</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">SELLING: Undetected rootkit for Linux servers</span><div class="t-desc">Kernel level persistence. CentOS/Ubuntu supported.</div><div class="t-author">By TuxRoot</div></td><td class="t-stats">45</td><td class="t-last">Oct 01, 21:10</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">Need help laundering BTC to XMR (large volume)</span><div class="t-desc">Looking for a trusted mixer with low fees.</div><div class="t-author">By CryptoWash</div></td><td class="t-stats">8</td><td class="t-last">Oct 01, 15:22</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">WTB: Aged Reddit/Twitter accounts with high karma</span><div class="t-desc">For crypto shill project. Need 100+ accounts.</div><div class="t-author">By ShillBot</div></td><td class="t-stats">11</td><td class="t-last">Oct 01, 11:40</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">Offering DDoS services - 500Gbps+ Layer 7</span><div class="t-desc">Bypass Cloudflare/DDoS-Guard. Demo available.</div><div class="t-author">By StresserPro</div></td><td class="t-stats">56</td><td class="t-last">Sep 30, 20:00</td></tr>
+            <tr class="default-row"><td class="t-icon">📄</td><td class="t-main"><span class="t-title">SELLING: Scanned passports and ID cards (Global)</span><div class="t-desc">High resolution, unwatermarked. Perfect for KYC bypass.</div><div class="t-author">By DocForge</div></td><td class="t-stats">29</td><td class="t-last">Sep 30, 18:15</td></tr>
+
+            <!-- 搜索过滤后的结果 -->
+            <tr class="filtered-row" style="display: none;">
+              <td class="t-icon">📄</td><td class="t-main"><span class="t-title">Best offshore SMTP relay for <span class="kw-hl">anonymous</span> mass mailing?</span><div class="t-desc">Need to send alerts without triggering spam filters.</div><div class="t-author">By ServerGod</div></td><td class="t-stats">14</td><td class="t-last">3 days ago</td>
+            </tr>
+            <tr class="filtered-row" style="display: none;">
+              <td class="t-icon">📄</td><td class="t-main"><span class="t-title">Bypass Proofpoint/Mimecast with weaponized PDF <span class="kw-hl">attachment</span></span><div class="t-desc">Looking for someone to craft the payload.</div><div class="t-author">By MailSp00f</div></td><td class="t-stats">8</td><td class="t-last">3 days ago</td>
+            </tr>
+            
+            <!-- 目标帖子：K-Shadow -->
+            <tr class="filtered-row" style="display: none;" id="target-post-row">
+              <td class="t-icon">📄</td>
+              <td class="t-main">
+                <span class="t-title">Need help sending an <span class="kw-hl">anonymous</span> <span class="kw-hl">email</span> (with <span class="kw-hl">attachment</span>)</span>
+                <div class="t-desc">Looking for a reliable service. Bounty: 3000 USDT via Escrow.</div>
+                <div class="t-author">By K-Shadow</div>
+              </td>
+              <td class="t-stats">0</td><td class="t-last">3 days ago</td>
+            </tr>
+
+            <tr class="filtered-row" style="display: none;">
+              <td class="t-icon">📄</td><td class="t-main"><span class="t-title">WTB: Webmail exploit to steal <span class="kw-hl">email</span> databases</span><div class="t-desc">Need access to corporate webmail servers.</div><div class="t-author">By DataThief</div></td><td class="t-stats">5</td><td class="t-last">4 days ago</td>
+            </tr>
+            <tr class="filtered-row" style="display: none;">
+              <td class="t-icon">📄</td><td class="t-main"><span class="t-title">How to send untraceable <span class="kw-hl">email</span> without VPN?</span><div class="t-desc">Discussion on Tor routing and offshore mail servers.</div><div class="t-author">By OpSecNoob</div></td><td class="t-stats">22</td><td class="t-last">4 days ago</td>
+            </tr>
+            <tr class="filtered-row" style="display: none;">
+              <td class="t-icon">📄</td><td class="t-main"><span class="t-title">SELLING: Tool to bind malware to any <span class="kw-hl">attachment</span> (DOCX/PDF)</span><div class="t-desc">FUD builder. Silent execution upon opening.</div><div class="t-author">By MacroKing</div></td><td class="t-stats">41</td><td class="t-last">5 days ago</td>
+            </tr>
+          </tbody>
+        </table>
+      </main>
+    </div>
+  </div>
+
+  <!-- 视图 3：帖子详情页 -->
+  <div class="view-pane" id="pane-post">
+    <div class="forum-header-sticky">
+      <div class="forum-title">AetherBoard</div>
+      <div class="forum-nav">
+        <div class="nav-links">
+          <span>Forums</span> <span>Escrow</span> <span>Rules</span> <span>Mirrors</span>
+        </div>
+        <div class="forum-search-box">
+          <input type="text" value="email / anonymous / attachment" readonly style="color:#777;">
+          <button>Search</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="forum-layout">
+      <aside class="forum-sidebar">
+        <div class="sidebar-block">
+          <h3>Categories</h3>
+          <div class="sidebar-list">
+            <div>Announcements</div>
+            <div>OpSec & Anonymity</div>
+            <div class="active">Job Market & Services</div>
+            <div>Database Leaks</div>
+            <div>Malware & Exploits</div>
+          </div>
+        </div>
+        <div class="sidebar-block">
+          <h3>Network Info</h3>
+          <div style="padding: 12px; font-size: 11px; color: #777; line-height: 1.6; font-family: monospace;">
+            JS Status: Disabled<br>
+            Server Time: 13:45 UTC<br>
+            System: Nominal
+          </div>
+        </div>
+      </aside>
+
+      <main class="forum-main">
+        <div class="breadcrumb">
+          <a onclick="handleBack()">◄ Back to Search Results</a> &nbsp;|&nbsp; AetherBoard > Job Market & Services > Thread #80421
+        </div>
+        
+        <div class="post-box">
+          <div class="post-author-panel">
+            <div class="author-name">K-Shadow</div>
+            <div class="author-title">Newbie</div>
+            <div class="author-stats">
+              Joined: March 2026<br>
+              Posts: 1<br>
+              Trust Level: 0<br>
+              Status: Offline
+            </div>
+          </div>
+          
+          <div class="post-content-panel">
+            <div>
+              <div class="post-top-meta">
+                <span>Posted: 3 days ago</span>
+                <span>#1</span>
+              </div>
+              <h1 class="post-h1">Need help sending an anonymous email (with attachment)</h1>
+              <div class="post-text">
+                Looking for a reliable service or individual to send a highly sensitive email with a PDF attachment.<br><br>
+                Bounty: 3000 USDT<br><br>
+                Drop your PGP public key below if you can do this, and I will contact you securely. Do not PM me here.
+              </div>
+              
+              <div class="pgp-block">
+-----BEGIN PGP PUBLIC KEY BLOCK-----<br>
+Version: GnuPG v2.2.27 (MingW32)<br>
+<br>
+mQINBGFH2w8BEAC/6J8h+U5q9XyT4kR1A2pZ...<br>
+9vXz7bV8Q1wJ3L5yG4+U6cI8q9...<br>
+Xy3M4vQ1a2sD5fG6hJ7kL8... [Truncated for Display]<br>
+=x9L3<br>
+-----END PGP PUBLIC KEY BLOCK-----
+              </div>
+            </div>
+
+            <div class="post-action-bar">
+              <button>Report</button>
+              <button>Quote</button>
+              <button>Reply</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- 底部隐形命令行唤起条 -->
+    <div class="mail-cli-overlay" id="cli-overlay">
+      <span class="t-prompt">analyst@ws:~$</span>
+      <span class="t-cmd" id="cli-input"></span><span class="cursor"></span>
+    </div>
+  </div>
+
+  <!-- 视图 4：全屏跳板追踪终端 (严谨、硬核真实环境) -->
+  <div class="view-pane" id="pane-terminal">
+    <div id="term-logs"></div>
+    <div id="term-input-line" style="display: none; margin-top: 14px;">
+      <span class="t-prompt">analyst@ws:~$</span>
+      <span class="t-cmd" id="cli-input-2"></span><span class="cursor"></span>
+    </div>
+  </div>
+
+  <script>
+    let currentStage = "start"; 
+    let isUrlBarFocused = false;
+    
+    const URL_TARGET = "http://aether3p2x7v4z9q5m8n1b6c2d4f8g7h9j3k5l6p0r2t4v6w8y.onion";
+    const SEARCH_TARGET = "email / anonymous / attachment";
+    const TRACE_CMD_1 = "trace-node --target K-Shadow"; 
+    const TRACE_CMD_2 = "lock-node --force --bypass-relay"; 
+    const TRACE_CMD_3 = "intel-query --reputation 118.143.88.29"; 
+
+    let typeIdx = 0;
+    let typeIdx2 = 0;
+    let typeIdx3 = 0;
+
+    const urlBar = document.getElementById('url-bar');
+    const addressContainer = document.getElementById('address-container');
+    const forumSearchBar = document.getElementById('forum-search-bar');
+    const cliOverlay = document.getElementById('cli-overlay');
+    const cliInput = document.getElementById('cli-input');
+    const termLogs = document.getElementById('term-logs');
+    const termInputLine = document.getElementById('term-input-line');
+    const cliInput2 = document.getElementById('cli-input-2');
+    const mainBrowserBar = document.getElementById('main-browser-bar');
+    
+    const defaultRows = document.querySelectorAll('.default-row');
+    const filteredRows = document.querySelectorAll('.filtered-row');
+
+    addressContainer.addEventListener('click', () => {
+      isUrlBarFocused = true;
+      urlBar.focus();
+    });
+    urlBar.addEventListener('focus', () => {
+      isUrlBarFocused = true;
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key.startsWith('F') && !isNaN(e.key.substring(1))) {
+        return; 
+      }
+
+      if (e.key === 'Escape') {
+        window.location.reload();
+        return;
+      }
+
+      if (['Control', 'Shift', 'Alt', 'Meta', 'CapsLock', 'Tab'].includes(e.key)) return;
+
+      if (currentStage === "start") {
+        if (!isUrlBarFocused) return;
+
+        e.preventDefault();
+        if (e.key === 'Enter') {
+          urlBar.value = URL_TARGET;
+          switchStage("forum");
+          return;
+        }
+        if (e.key === 'Backspace') { typeIdx = Math.max(0, typeIdx - 1); } else { typeIdx++; }
+        urlBar.value = URL_TARGET.substring(0, typeIdx);
+      } 
+      
+      else if (currentStage === "forum") {
+        e.preventDefault();
+        if (e.key === 'Enter') {
+          forumSearchBar.value = SEARCH_TARGET;
+          executeSearch();
+          return;
+        }
+        if (e.key === 'Backspace') { typeIdx = Math.max(0, typeIdx - 1); } else { typeIdx++; }
+        forumSearchBar.value = SEARCH_TARGET.substring(0, typeIdx);
+      }
+
+      else if (currentStage === "post") {
+        e.preventDefault();
+        cliOverlay.style.display = 'flex';
+        if (e.key === 'Enter') {
+          cliInput.innerText = TRACE_CMD_1;
+          switchStage("terminal");
+          runMultiHopTracePart1();
+          return;
+        }
+        if (e.key === 'Backspace') { typeIdx = Math.max(0, typeIdx - 1); } else { typeIdx += 1; }
+        if (typeIdx > TRACE_CMD_1.length) typeIdx = TRACE_CMD_1.length;
+        cliInput.innerText = TRACE_CMD_1.substring(0, typeIdx);
+      }
+
+      else if (currentStage === "terminal_paused_1") {
+        e.preventDefault();
+        if (e.key === 'Enter') {
+          cliInput2.innerText = TRACE_CMD_2;
+          termInputLine.style.display = "none";
+          currentStage = "terminal_running_2";
+          runMultiHopTracePart2();
+          return;
+        }
+        if (e.key === 'Backspace') { typeIdx2 = Math.max(0, typeIdx2 - 1); } else { typeIdx2 += 1; }
+        if (typeIdx2 > TRACE_CMD_2.length) typeIdx2 = TRACE_CMD_2.length;
+        cliInput2.innerText = TRACE_CMD_2.substring(0, typeIdx2);
+      }
+
+      else if (currentStage === "terminal_paused_2") {
+        e.preventDefault();
+        if (e.key === 'Enter') {
+          cliInput2.innerText = TRACE_CMD_3;
+          termInputLine.style.display = "none";
+          currentStage = "terminal_done";
+          runMultiHopTracePart3();
+          return;
+        }
+        if (e.key === 'Backspace') { typeIdx3 = Math.max(0, typeIdx3 - 1); } else { typeIdx3 += 1; }
+        if (typeIdx3 > TRACE_CMD_3.length) typeIdx3 = TRACE_CMD_3.length;
+        cliInput2.innerText = TRACE_CMD_3.substring(0, typeIdx3);
+      }
+    });
+
+    function executeSearch() {
+        defaultRows.forEach(row => row.style.display = 'none');
+        filteredRows.forEach(row => row.style.display = 'table-row');
+    }
+
+    document.getElementById('target-post-row').addEventListener('click', () => {
+      if (currentStage === "forum") { switchStage("post"); }
+    });
+
+    function handleBack() {
+      if (currentStage === "post") {
+          switchStage("forum");
+          defaultRows.forEach(row => row.style.display = 'none');
+          filteredRows.forEach(row => row.style.display = 'table-row');
+      }
+    }
+
+    function switchStage(stageName) {
+      document.querySelectorAll('.view-pane').forEach(p => p.classList.remove('active'));
+      typeIdx = 0;
+      currentStage = stageName;
+
+      if (stageName === "start") {
+        mainBrowserBar.style.display = 'flex';
+        urlBar.value = "";
+        isUrlBarFocused = false;
+        document.getElementById('pane-start').classList.add('active');
+      } else {
+        mainBrowserBar.style.display = 'none';
+        if (stageName === "forum") document.getElementById('pane-forum').classList.add('active');
+        else if (stageName === "post") {
+          document.getElementById('pane-post').classList.add('active');
+          cliOverlay.style.display = 'none';
+          cliInput.innerText = "";
+        } 
+        else if (stageName === "terminal") {
+          document.getElementById('pane-terminal').classList.add('active');
+          document.getElementById('pane-terminal').style.top = "0";
+        }
+      }
+    }
+
+    function runMultiHopTracePart1() {
+      termLogs.innerHTML = '';
+      const executedDiv = document.createElement('div');
+      executedDiv.style.marginBottom = "14px";
+      executedDiv.innerHTML = `<span class="t-prompt">analyst@ws:~$</span> <span class="t-cmd">${TRACE_CMD_1}</span>`;
+      termLogs.appendChild(executedDiv);
+
+      const traceLogs = [
+        { text: "[*] Initializing traceroute module...", class: "t-dim" },
+        { text: "[*] Binding to local interface eth0 (10.0.2.15)...", class: "t-dim" },
+        { text: "[*] Resolving target session token [K-Shadow]...", class: "t-dim" },
+        { text: "[+] Token resolved to temporary routing ID: 9x8f-22a1-b4c9", class: "t-dim" },
+        { text: "--------------------------------------------------------------------------------", class: "t-dim" },
+        { text: "[HOP 1 - TOR EXIT RELAY]", class: "t-cyan" },
+        { text: "  Node Address    : 185.220.101.5 [Tor Exit Node Alpha]", class: "t-dim" },
+        { text: "  Latency / Skew  : 142ms (+0.003s)", class: "t-dim" },
+        { text: "  Status          : Stripping outer TLS encryption layer...", class: "t-dim" },
+        { text: "[HOP 2 - PROXY ENCAPSULATION]", class: "t-cyan" },
+        { text: "  Node Address    : 103.251.12.88 [Encrypted Tunnel Gateway]", class: "t-dim" },
+        { text: "  Latency / Skew  : 215ms (+0.012s)", class: "t-dim" },
+        { text: "  Status          : Bypassing VPN encapsulation layer...", class: "t-dim" },
+        { text: "--------------------------------------------------------------------------------", class: "t-dim" },
+        { text: "[!] WARNING: Trace routing is becoming complex. Multiple obfuscation layers detected.", class: "t-yellow" },
+        { text: "[!] Anti-tracing countermeasures engaged by remote host.", class: "t-yellow" },
+        { text: "[!] Connection volatile. Manual intervention required to lock origin node.", class: "t-dim" }
+      ];
+
+      let currentIndex = 0;
+      function printNextLog() {
+        if (currentIndex < traceLogs.length) {
+          const item = traceLogs[currentIndex];
+          const div = document.createElement('div');
+          if (item.class) div.className = item.class;
+          div.innerText = item.text;
+          termLogs.appendChild(div);
+          
+          currentIndex++;
+          setTimeout(printNextLog, Math.random() * 35 + 20); 
+        } else {
+          cliInput2.innerText = "";
+          termInputLine.style.display = "block";
+          currentStage = "terminal_paused_1";
+          document.getElementById('pane-terminal').scrollTop = document.getElementById('pane-terminal').scrollHeight;
+        }
+      }
+      printNextLog();
+    }
+
+    function runMultiHopTracePart2() {
+      const executedDiv = document.createElement('div');
+      executedDiv.style.marginBottom = "14px";
+      executedDiv.innerHTML = `<span class="t-prompt">analyst@ws:~$</span> <span class="t-cmd">${TRACE_CMD_2}</span>`;
+      termLogs.appendChild(executedDiv);
+
+      const traceLogs = [
+        { text: "[*] Executing bypass protocol... forcing state exhaustion.", class: "t-dim" },
+        { text: "[+] Relay firewall bypassed. Raw egress socket captured.", class: "t-dim" },
+        { text: "[HOP 3 - ORIGIN HOP TERMINATION LOCKED]", class: "t-cyan" },
+        { text: "  Target IP : 118.143.88.29 | Port: 49152 (TCP)", class: "t-white" },
+        { text: "--------------------------------------------------------------------------------", class: "t-dim" },
+        { text: "[*] Querying APNIC Regional Internet Registry & BGP Routing Tables...", class: "t-dim" },
+        { text: "% ASN Allocation: AS17816", class: "t-dim" },
+        { text: "inetnum:        118.143.88.0 - 118.143.88.255", class: "t-dim" },
+        { text: "Entity Name:    Trinex IT Solutions", class: "t-yellow" },
+        { text: "Entity Type:    Enterprise Managed IT Services & Outsourcing", class: "t-yellow" },
+        { text: "descr:          Commercial Optical Lease Line Infrastructure", class: "t-dim" },
+        { text: "route-path:     AS17816 -> Line Drop #HK-EAST-0918-B", class: "t-dim" }
+      ];
+
+      let currentIndex = 0;
+      function printNextLog() {
+        if (currentIndex < traceLogs.length) {
+          const item = traceLogs[currentIndex];
+          const div = document.createElement('div');
+          if (item.class) div.className = item.class;
+          div.innerText = item.text;
+          termLogs.appendChild(div);
+          
+          currentIndex++;
+          document.getElementById('pane-terminal').scrollTop = document.getElementById('pane-terminal').scrollHeight;
+          setTimeout(printNextLog, Math.random() * 40 + 20); 
+        } else {
+          cliInput2.innerText = "";
+          typeIdx3 = 0;
+          termInputLine.style.display = "block";
+          currentStage = "terminal_paused_2";
+          document.getElementById('pane-terminal').scrollTop = document.getElementById('pane-terminal').scrollHeight;
+        }
+      }
+      printNextLog();
+    }
+
+    function runMultiHopTracePart3() {
+      const executedDiv = document.createElement('div');
+      executedDiv.style.marginBottom = "14px";
+      executedDiv.innerHTML = `<span class="t-prompt">analyst@ws:~$</span> <span class="t-cmd">${TRACE_CMD_3}</span>`;
+      termLogs.appendChild(executedDiv);
+
+      const traceLogs = [
+        { text: "[*] Querying Global Threat Intelligence Database (AbuseIPDB / VirusTotal)...", class: "t-dim" },
+        { text: "% Aggregating threat feeds & malicious IOC history...", class: "t-dim" },
+        { text: "Threat Score:   0/100 (Clean / Zero Blacklist Reports)", class: "t-green" },
+        { text: "--------------------------------------------------------------------------------", class: "t-dim" },
+        { text: "[*] Reverse DNS PTR Query [118.143.88.29] & Banner Inspection:", class: "t-dim" },
+        { text: "Target Gateway Server: SRV01-GW.trinex-it.com", class: "t-green" },
+        { text: "Subnet Role:           DMZ Internal Proxy Gateway", class: "t-dim" }
+      ];
+
+      let currentIndex = 0;
+      function printNextLog() {
+        if (currentIndex < traceLogs.length) {
+          const item = traceLogs[currentIndex];
+          const div = document.createElement('div');
+          if (item.class) div.className = item.class;
+          div.innerText = item.text;
+          termLogs.appendChild(div);
+          
+          currentIndex++;
+          document.getElementById('pane-terminal').scrollTop = document.getElementById('pane-terminal').scrollHeight;
+          setTimeout(printNextLog, Math.random() * 45 + 25); 
+        } else {
+          const endDiv = document.createElement('div');
+          endDiv.style.marginTop = "14px";
+          endDiv.innerHTML = `<span class="t-prompt">analyst@ws:~$</span> <span class="cursor"></span>`;
+          termLogs.appendChild(endDiv);
+          document.getElementById('pane-terminal').scrollTop = document.getElementById('pane-terminal').scrollHeight;
+        }
+      }
+      printNextLog();
+    }
+  </script>
+</body>
+</html>
